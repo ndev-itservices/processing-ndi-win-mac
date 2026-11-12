@@ -100,7 +100,7 @@ jobs:
   package:
     name: package library
     needs: native
-    runs-on: macos-latest       # lipo is needed to split the universal NDI runtime per variant
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 

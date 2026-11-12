@@ -71,13 +71,11 @@ for v in macos-aarch64 macos-x86_64 windows-amd64; do
   cp native/build/$v/*.dylib native/build/$v/*.dll "$D/library/$v/" 2>/dev/null || true
   case "$v" in
     macos-aarch64|macos-x86_64)
-      RT="native/runtime/macos/libndi.dylib"
-      if [ -f "$RT" ]; then
-        # one architecture per variant folder keeps the download small
-        A="arm64"; [ "$v" = "macos-x86_64" ] && A="x86_64"
-        if command -v lipo >/dev/null 2>&1; then lipo "$RT" -thin "$A" -output "$D/library/$v/libndi.dylib"
-        else cp "$RT" "$D/library/$v/"; fi
-      else echo "   WARNING: $RT missing (run scripts/fetch_ndi_runtime.sh)"; fi ;;
+      # prefer the single-architecture copies made by fetch_ndi_runtime.sh (no lipo needed here)
+      RT="native/runtime/$v/libndi.dylib"
+      if [ -f "$RT" ]; then cp "$RT" "$D/library/$v/"
+      elif [ -f native/runtime/macos/libndi.dylib ]; then cp native/runtime/macos/libndi.dylib "$D/library/$v/"
+      else echo "   WARNING: NDI runtime missing (run scripts/fetch_ndi_runtime.sh)"; fi ;;
     windows-amd64)
       RT="native/runtime/windows-amd64/Processing.NDI.Lib.x64.dll"
       if [ -f "$RT" ]; then cp "$RT" "$D/library/$v/"

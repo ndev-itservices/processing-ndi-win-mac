@@ -1,6 +1,7 @@
 #!/bin/bash
 # Copies the NDI(R) runtime that is bundled with the library into native/runtime/:
 #   native/runtime/macos/libndi.dylib               (universal arm64 + x86_64)
+#   native/runtime/macos-aarch64|macos-x86_64/libndi.dylib  (one architecture each, for the package)
 #   native/runtime/windows-amd64/Processing.NDI.Lib.x64.dll
 #   native/runtime/libndi_licenses.txt              (third-party licences required by NDI)
 # The runtime is NOT kept in git: it comes from the NDI SDK, whose licence you accept when
@@ -39,6 +40,11 @@ fetch_macos() {
   cp "$sdk/lib/macOS/libndi.dylib" "$OUT/macos/"
   cp "$sdk/lib/macOS/libndi_licenses.txt" "$OUT/libndi_licenses.txt" 2>/dev/null || cp "$sdk/licenses/libndi_licenses.txt" "$OUT/"
   [ -f "$sdk/Version.txt" ] && cp "$sdk/Version.txt" "$OUT/macos/NDI-Version.txt"
+  # one architecture per Processing variant folder keeps the download small
+  for v in macos-aarch64:arm64 macos-x86_64:x86_64; do
+    mkdir -p "$OUT/${v%%:*}"
+    lipo "$OUT/macos/libndi.dylib" -thin "${v##*:}" -output "$OUT/${v%%:*}/libndi.dylib"
+  done
   echo "   macOS runtime: $(cat "$OUT/macos/NDI-Version.txt" 2>/dev/null || echo '?')"
 }
 
