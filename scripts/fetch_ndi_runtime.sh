@@ -8,7 +8,7 @@
 #
 # macOS sources, in order: $NDI_SDK_APPLE, "/Library/NDI SDK for Apple", or (CI, FETCH_NDI_DOWNLOAD=1)
 #   the official SDK installer, expanded without installing it.
-# Windows: run on Windows (Git Bash) after installing the NDI 6 SDK ("NDI 6 SDK.exe /VERYSILENT" in CI),
+# Windows: run on Windows (Git Bash) after installing the NDI 6 SDK (CI extracts the installer instead),
 #   or set NDI_SDK_WIN to the folder that contains it. On a Mac: NDI_SDK_WIN="<...>/NDI 6 SDK.exe"
 #   scripts/fetch_ndi_runtime.sh windows   (extracts the installer with innoextract).
 # Author: Tiago Martins

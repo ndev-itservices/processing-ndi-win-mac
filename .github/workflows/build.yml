@@ -23,6 +23,7 @@ jobs:
   native:
     name: native (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -56,20 +57,15 @@ jobs:
         run: scripts/run_tests.sh
 
       # ---------------------------------------------------------------- Windows
-      - name: NDI runtime (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $exe = "$env:RUNNER_TEMP\NDI6SDK.exe"
-          Invoke-WebRequest -Uri "https://downloads.ndi.tv/SDK/NDI_SDK/NDI%206%20SDK.exe" -OutFile $exe
-          Start-Process -FilePath $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-" -Wait
-          Get-ChildItem "C:\Program Files\NDI" -Recurse -Filter "Processing.NDI.Lib.x64.dll" | Select-Object FullName
-
-      - name: Fetch runtime and compile Java (Windows)
+      # the SDK installer is only extracted (innoextract), never run: a silent install hangs on the runner
+      - name: NDI runtime and Java (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          scripts/fetch_ndi_runtime.sh
+          choco install innoextract -y --no-progress > /dev/null
+          mkdir -p build
+          curl -fsSL -o build/NDI6SDK.exe "https://downloads.ndi.tv/SDK/NDI_SDK/NDI%206%20SDK.exe"
+          NDI_SDK_WIN="$PWD/build/NDI6SDK.exe" scripts/fetch_ndi_runtime.sh windows
           SKIP_NATIVE=1 ./build.sh
 
       - name: Set up MSVC
