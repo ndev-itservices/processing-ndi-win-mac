@@ -1,0 +1,6 @@
+build/
+dist/
+native/build/
+native/runtime/
+*.class
+.DS_Store

@@ -1,0 +1,150 @@
+# Builds and tests the library on macOS and Windows, then assembles one zip with every native
+# binary and the bundled NDI runtime. Actions > build > Run workflow with "release_tag" (or a
+# pushed "v*" tag) publishes a GitHub release with the zip.
+# The NDI runtime is taken from the official NDI 6 SDK installers (https://ndi.video/for-developers/).
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ "v*" ]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a GitHub release for this tag (e.g. v1.0.0); leave empty to only build"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  native:
+    name: native (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest      # Apple Silicon runner; builds the universal dylib
+            variant: macos
+          - os: windows-latest
+            variant: windows-amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # ---------------------------------------------------------------- macOS
+      - name: NDI runtime (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: FETCH_NDI_DOWNLOAD=1 scripts/fetch_ndi_runtime.sh
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: ./build.sh
+
+      - name: Test (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: scripts/run_tests.sh
+
+      # ---------------------------------------------------------------- Windows
+      - name: NDI runtime (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = "$env:RUNNER_TEMP\NDI6SDK.exe"
+          Invoke-WebRequest -Uri "https://downloads.ndi.tv/SDK/NDI_SDK/NDI%206%20SDK.exe" -OutFile $exe
+          Start-Process -FilePath $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-" -Wait
+          Get-ChildItem "C:\Program Files\NDI" -Recurse -Filter "Processing.NDI.Lib.x64.dll" | Select-Object FullName
+
+      - name: Fetch runtime and compile Java (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          scripts/fetch_ndi_runtime.sh
+          SKIP_NATIVE=1 ./build.sh
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build native bridge (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: call native\build_native.bat %CD%\native\build || exit /b 1
+
+      - name: Package and test (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          SKIP_NATIVE=1 ./build.sh
+          cmd //c "scripts\\run_tests.bat"
+
+      - name: Upload native binaries and runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.variant }}
+          path: |
+            native/build/macos-aarch64
+            native/build/macos-x86_64
+            native/build/windows-amd64
+            native/runtime
+          if-no-files-found: error
+
+  package:
+    name: package library
+    needs: native
+    runs-on: macos-latest       # lipo is needed to split the universal NDI runtime per variant
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download native binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: native
+          merge-multiple: true
+
+      - name: Assemble the library zip
+        shell: bash
+        run: |
+          ls -R native/build native/runtime
+          SKIP_NATIVE=1 ./build.sh
+          # fixed names, so https://github.com/<repo>/releases/latest/download/ProcessingNDI.zip always works;
+          # ProcessingNDI.txt is the file Processing's Contribution Manager reads
+          cp dist/ProcessingNDI.zip ProcessingNDI.zip
+          cp library.properties ProcessingNDI.txt
+          ls -la ProcessingNDI.*
+
+      - name: Upload library zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProcessingNDI
+          path: |
+            ProcessingNDI.zip
+            ProcessingNDI.txt
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          files: |
+            ProcessingNDI.zip
+            ProcessingNDI.txt
+          generate_release_notes: true
